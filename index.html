@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>README</title>
+</head>
+<body>
+    <h1>EDC</h1>
+    <p>Noderīgi instrumenti.</p>
+
+    <h2>makegrid</h2>
+    <p><a href="/makegrid">makegrid</a></p>
+    <ul>
+        <li>Izveido KML Režģi ar burtu-ciparu marķējumu.</li>
+        <li>pēc tam - dalīties ar failu, atvērt Google Earth vai citās karšu programmās.</li>
+    </ul>
+    <p>! viss darbs notiek tikai uz iekārtas (html+js).</p>
+
+    <h2>panoviewer</h2>
+    <p><a href="/panoviewer">panoviewer</a></p>
+    <ul>
+        <li>ļauj skatīt panorāmas bildes kā sfēru.</li>
+        <li>(panorāmas var gatavot ar Hugin no bilžu kolecijas; ir iekārtas (insta360, droni), kas iedod jau gatavas).</li>
+        <li>kāpēc vajag viewer - gan android, gan windows - nav normālas panorāmas bilžu skatīšanas aplikācijas</li>
+    </ul>
+    <p>! viss darbs notiek uz iekārtas.</p>
+
+    <h2>jpg2kml</h2>
+    <p><a href="/jpg2kml">jpg2kml</a></p>
+    <ul>
+        <li>izvelk no jpg failiem EXIF informāciju un noformē kā KML mapi.</li>
+        <li>(domāts - sabildējām 300 attēlus, tagad sēžamies apstrādāt, vajag atrast bildes par konkrētu punktu).</li>
+    </ul>
+    <p>! viss darbs notiek uz iekārtas.</p>
+
+    <h2>stragla</h2>
+    <p><a href="/stragla">stragla</a></p>
+    <ul>
+        <li>Android aplikācija "STRAUMĒT+GLABĀT"</li>
+        <li>atvasināts no "screenstream"</li>
+        <li>risina problēmas:
+            <ul>
+                <li>problēma: ja noraustās tīkls, tad (screenstream) tiešraidi nomet.</li>
+                <li>risinājums: stragla - turpina neatlaidīgi sūtīt - ja tīkls atjaunojās, atjaunojas tiešraide.</li>
+                <li>problēma: android ekrānu var lasīt tikai viena aplikācija - ja lieto screenstream, tad nestrādās ekrāna ieraksts (xrecorder vai tml).</li>
+                <li>risinājums: stragla - gan straumē gan ieraksta (attiecīgi ir tā "viena vienīgā aplikācija kas lasa ekrānu").</li>
+            </ul>
+        </li>
+        <li>! salīdzinot ar streenstream - noņemta jebkāda telemetrija, logošana, reklāmas.</li>
+    </ul>
+</body>
+</html>
