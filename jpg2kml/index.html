@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JPG Folder → KML</title>
+<script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.esm.js" type="module"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: monospace; background: #1a1a2e; color: #e0e0e0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 30px 20px; }
+  h1 { color: #a0c4ff; margin-bottom: 8px; font-size: 1.4em; letter-spacing: 1px; }
+  .subtitle { color: #888; font-size: 0.85em; margin-bottom: 24px; }
+
+  #dropzone {
+    width: 100%; max-width: 720px;
+    border: 2px dashed #4a6fa5;
+    border-radius: 12px;
+    padding: 48px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    background: #16213e;
+    position: relative;
+  }
+  #dropzone.dragover { border-color: #a0c4ff; background: #1e2f50; }
+  #dropzone .drop-icon { font-size: 2.5em; margin-bottom: 12px; }
+  #dropzone .drop-label { color: #a0c4ff; font-size: 1em; }
+  #dropzone .drop-hint { color: #666; font-size: 0.8em; margin-top: 8px; }
+  #fileInput { display: none; }
+
+  #controls {
+    width: 100%; max-width: 720px;
+    display: flex; gap: 12px; margin: 16px 0; align-items: center; flex-wrap: wrap;
+  }
+  button {
+    padding: 9px 20px; border-radius: 6px; border: none; cursor: pointer;
+    font-family: monospace; font-size: 0.9em; font-weight: bold; transition: background 0.2s;
+  }
+  #btnDownload { background: #2a7a4f; color: #fff; }
+  #btnDownload:hover { background: #35a063; }
+  #btnDownload:disabled { background: #2a3a30; color: #555; cursor: not-allowed; }
+  #btnClear { background: #4a2a2a; color: #ccc; }
+  #btnClear:hover { background: #7a3a3a; }
+  .status-line { color: #888; font-size: 0.82em; flex: 1; }
+
+  #log {
+    width: 100%; max-width: 720px;
+    background: #0f0f1a; border-radius: 8px; padding: 14px;
+    font-size: 0.78em; line-height: 1.6; max-height: 320px; overflow-y: auto;
+    border: 1px solid #2a2a4a;
+  }
+  .log-ok   { color: #6ec97a; }
+  .log-skip { color: #a07840; }
+  .log-err  { color: #c96e6e; }
+  .log-info { color: #6eaac9; }
+  .log-head { color: #a0c4ff; font-weight: bold; border-top: 1px solid #2a2a4a; padding-top: 4px; margin-top: 4px; }
+</style>
+</head>
+<body>
+<h1>JPG Folder → KML</h1>
+<p class="subtitle">Drone image EXIF extractor — generates Google Earth KML locally</p>
+
+<div id="dropzone" id="dropzone">
+  <div class="drop-icon">📁</div>
+  <div class="drop-label">Drop a folder or JPG files here</div>
+  <div class="drop-hint">or click to select files</div>
+  <input type="file" id="fileInput" multiple accept=".jpg,.jpeg">
+</div>
+
+<div id="controls">
+  <button id="btnDownload" disabled>⬇ Download KML</button>
+  <button id="btnClear">✕ Clear all</button>
+  <span class="status-line" id="statusLine">No images loaded.</span>
+</div>
+
+<div id="log"></div>
+
+<script type="module">
+import * as exifr from 'https://cdn.jsdelivr.net/npm/exifr/dist/full.esm.js';
+
+// ─── Constants (matching Python defaults) ────────────────────────────────────
+const PITCH_IF_NOT_READABLE = -45.0;
+const GROUND_FRAME_HEIGHT   = 1;
+
+// ─── Accumulated image data across drops ─────────────────────────────────────
+const imageList = []; // array of detail objects, keyed by filename
+
+// ─── Logging ─────────────────────────────────────────────────────────────────
+const logEl = document.getElementById('log');
+function log(msg, cls = 'log-ok') {
+  const d = document.createElement('div');
+  d.className = cls;
+  d.textContent = msg;
+  logEl.appendChild(d);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// ─── Status line ─────────────────────────────────────────────────────────────
+function updateStatus() {
+  const sl = document.getElementById('statusLine');
+  sl.textContent = imageList.length === 0
+    ? 'No images loaded.'
+    : `${imageList.length} image(s) accumulated.`;
+  document.getElementById('btnDownload').disabled = imageList.length === 0;
+}
+
+// ─── Math helpers ─────────────────────────────────────────────────────────────
+function toRad(deg) { return deg * Math.PI / 180; }
+function toDeg(rad) { return rad * 180 / Math.PI; }
+
+function norm3(v) {
+  const n = Math.sqrt(v[0]**2 + v[1]**2 + v[2]**2);
+  return [v[0]/n, v[1]/n, v[2]/n];
+}
+function scale3(v, s) { return [v[0]*s, v[1]*s, v[2]*s]; }
+
+// rotate around X axis by angle_x degrees
+function rotateX(v, angle_x) {
+  const r = toRad(angle_x);
+  return [
+    v[0],
+    v[1] * Math.cos(r) - v[2] * Math.sin(r),
+    v[1] * Math.sin(r) + v[2] * Math.cos(r),
+  ];
+}
+
+// rotate around Z axis by angle_z degrees (matches Python: negative angle)
+function rotateZ(v, angle_z) {
+  const r = toRad(-angle_z);
+  return [
+    v[0] * Math.cos(r) - v[1] * Math.sin(r),
+    v[0] * Math.sin(r) + v[1] * Math.cos(r),
+    v[2],
+  ];
+}
+
+// Scale vector so its Z component equals target_z
+function normalizeZ(v, target_z) {
+  if (v[2] * target_z < 0) {
+    // facing away from ground — use 500m length like Python
+    const n = Math.sqrt(v[0]**2 + v[1]**2 + v[2]**2);
+    return scale3(v, 500 / n);
+  }
+  return scale3(v, target_z / v[2]);
+}
+
+// Vincenty direct formula: move from [lon, lat] by `meters` at `bearing` degrees
+function destinationPoint(lon, lat, meters, bearing) {
+  const R = 6378137;          // WGS-84 equatorial radius
+  const f = 1 / 298.257223563;
+  const b = R * (1 - f);
+
+  const phi1 = toRad(lat);
+  const L1   = toRad(lon);
+  const alpha1 = toRad(bearing);
+
+  const sinAlpha1 = Math.sin(alpha1);
+  const cosAlpha1 = Math.cos(alpha1);
+
+  const tanU1 = (1 - f) * Math.tan(phi1);
+  const cosU1 = 1 / Math.sqrt(1 + tanU1 * tanU1);
+  const sinU1 = tanU1 * cosU1;
+
+  const sigma1 = Math.atan2(tanU1, cosAlpha1);
+  const sinAlpha = cosU1 * sinAlpha1;
+  const cosSqAlpha = 1 - sinAlpha * sinAlpha;
+  const uSq = cosSqAlpha * (R * R - b * b) / (b * b);
+  const A = 1 + uSq / 16384 * (4096 + uSq * (-768 + uSq * (320 - 175 * uSq)));
+  const B = uSq / 1024 * (256 + uSq * (-128 + uSq * (74 - 47 * uSq)));
+
+  let sigma = meters / (b * A);
+  let sigmaP, cos2SigmaM, sinSigma, cosSigma;
+  let iter = 0;
+  do {
+    cos2SigmaM = Math.cos(2 * sigma1 + sigma);
+    sinSigma   = Math.sin(sigma);
+    cosSigma   = Math.cos(sigma);
+    const deltaSigma = B * sinSigma * (cos2SigmaM + B / 4 * (
+      cosSigma * (-1 + 2 * cos2SigmaM * cos2SigmaM) -
+      B / 6 * cos2SigmaM * (-3 + 4 * sinSigma * sinSigma) * (-3 + 4 * cos2SigmaM * cos2SigmaM)
+    ));
+    sigmaP = sigma;
+    sigma  = meters / (b * A) + deltaSigma;
+  } while (Math.abs(sigma - sigmaP) > 1e-12 && ++iter < 100);
+
+  const x     = sinU1 * sinSigma - cosU1 * cosSigma * cosAlpha1;
+  const phi2  = Math.atan2(
+    sinU1 * cosSigma + cosU1 * sinSigma * cosAlpha1,
+    (1 - f) * Math.sqrt(sinAlpha * sinAlpha + x * x)
+  );
+  const lambda = Math.atan2(sinSigma * sinAlpha1, cosU1 * cosSigma - sinU1 * sinSigma * cosAlpha1);
+  const C      = f / 16 * cosSqAlpha * (4 + f * (4 - 3 * cosSqAlpha));
+  const L      = lambda - (1 - C) * f * sinAlpha * (
+    sigma + C * sinSigma * (cos2SigmaM + C * cosSigma * (-1 + 2 * cos2SigmaM * cos2SigmaM))
+  );
+  const L2 = L1 + L;
+  return [toDeg(L2), toDeg(phi2)];
+}
+
+// Move lon_lat_alt by a [east, north, up] vector in meters
+function geoMove(lonLatAlt, vector) {
+  const [lon, lat, alt] = lonLatAlt;
+  const east  = vector[0];
+  const north = vector[1];
+  const up    = vector[2];
+
+  const [lon2, lat2] = destinationPoint(lon, lat, east, 90);   // move east
+  const [lon3, lat3] = destinationPoint(lon2, lat2, north, 0); // move north
+  return [lon3, lat3, alt + up];
+}
+
+// ─── Focal length in pixels (diagonal-based 35mm equiv) ──────────────────────
+function getFocalLengthPixels(focal35mm, w, h, zoom) {
+  const sensorDiag35 = Math.sqrt(36**2 + 24**2);
+  const diagPx = Math.sqrt(w**2 + h**2);
+  return (focal35mm * zoom / sensorDiag35) * diagPx;
+}
+
+// ─── Frame corner vectors (camera facing north, horizontal) ───────────────────
+function frameCornerVectors(focal35mm, w, h, zoom) {
+  const focalPx = getFocalLengthPixels(focal35mm, w, h, zoom);
+  const corners = [];
+  for (const [cx, cy] of [[-1,-1],[-1,+1],[+1,+1],[+1,-1]]) {
+    let v = [w/2*cx, focalPx, h/2*cy];
+    const n = Math.sqrt(v[0]**2 + v[1]**2 + v[2]**2);
+    v = scale3(v, 50 / n); // 50m unit vectors
+    corners.push(v);
+  }
+  return corners;
+}
+
+// ─── Make frame on ground (matches Python make_frameonground) ─────────────────
+function makeFrameOnGround(details) {
+  const { lon_lat_alt, camera_azimuth_assumed, FocalLengthIn35mmFilm,
+          ExifImageWidth, ExifImageHeight } = details;
+  let { camera_pitch_assumed, DigitalZoomRatio } = details;
+
+  const azimuth = camera_azimuth_assumed || 0;
+  let pitch = camera_pitch_assumed;
+  if (!pitch || pitch >= 0) pitch = PITCH_IF_NOT_READABLE;
+
+  const focal35mm = FocalLengthIn35mmFilm || 24.0;
+  const w = ExifImageWidth  || 4000;
+  const h = ExifImageHeight || 3000;
+
+  const NORTH = [0, 1, 0];
+  const altOffset = GROUND_FRAME_HEIGHT - lon_lat_alt[2];
+
+  const corners = [lon_lat_alt];
+
+  // centre direction
+  const centreVec = normalizeZ(rotateZ(rotateX(NORTH, pitch), azimuth), altOffset);
+  corners.push(geoMove(lon_lat_alt, centreVec));
+
+  const useZoom = DigitalZoomRatio || 1.4;
+  const focalPx = getFocalLengthPixels(focal35mm, w, h, useZoom);
+  details.pixel_size_mrad = 1000 / focalPx;
+
+  const frameVecs = frameCornerVectors(focal35mm, w, h, useZoom);
+  frameVecs.push(frameVecs[0]); // close the loop
+  for (const fv of frameVecs) {
+    corners.push(geoMove(lon_lat_alt, normalizeZ(rotateZ(rotateX(fv, pitch), azimuth), altOffset)));
+  }
+
+  details.frameonground = corners;
+}
+
+// ─── DMS tuple → decimal degrees ─────────────────────────────────────────────
+function dmsToDecimal(dms) {
+  if (typeof dms === 'number') return dms; // exifr may already decode
+  const [d, m, s] = dms;
+  return d + m / 60 + s / 3600;
+}
+
+// ─── Parse XMP from raw file bytes (fallback / supplement) ───────────────────
+async function readXmpRaw(file) {
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  const str   = new TextDecoder('latin1').decode(bytes);
+  const start = str.indexOf('<x:xmpmeta');
+  const end   = str.indexOf('</x:xmpmeta');
+  if (start < 0) return {};
+  const xml = str.slice(start, end + 12);
+  try {
+    const doc = new DOMParser().parseFromString(xml, 'application/xml');
+    const result = {};
+    // flatten all attributes of all elements
+    doc.querySelectorAll('*').forEach(el => {
+      for (const attr of el.attributes) {
+        const localName = attr.localName;
+        result[localName] = attr.value;
+      }
+      if (el.childNodes.length === 1 && el.firstChild.nodeType === 3) {
+        result[el.localName] = el.textContent.trim();
+      }
+    });
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+// ─── safer float ──────────────────────────────────────────────────────────────
+function sf(val, def = 0.0) {
+  const f = parseFloat(val);
+  return isFinite(f) ? f : def;
+}
+function sv(val, def = null) {
+  return (val !== undefined && val !== null) ? val : def;
+}
+
+// ─── Process a single JPG File → detail object ───────────────────────────────
+async function processFile(file) {
+  const filename = file.name;
+
+  // exifr: parse EXIF + XMP
+  let exif = {};
+  try {
+    exif = await exifr.parse(file, {
+      tiff: true, exif: true, gps: true, xmp: true,
+      translateKeys: true, translateValues: false, reviveValues: true,
+    }) || {};
+  } catch (e) {
+    log(`${filename}: exifr error — ${e.message}`, 'log-err');
+  }
+
+  // Also do raw XMP scan for DJI fields that exifr might namespace-mangle
+  let xmpRaw = {};
+  try { xmpRaw = await readXmpRaw(file); } catch {}
+
+  // Merge: exif takes priority, xmpRaw fills gaps
+  const merged = { ...xmpRaw, ...exif };
+
+  // GPS check
+  const lat = merged.latitude  ?? merged.GPSLatitude;
+  const lon = merged.longitude ?? merged.GPSLongitude;
+  if (!lat || !lon) throw new Error('No GPS data');
+
+  const latDec = dmsToDecimal(lat);
+  const lonDec = dmsToDecimal(lon);
+  if (latDec === 0 && lonDec === 0) throw new Error('GPS is zero');
+
+  const details = {};
+  details.filename = filename;
+  const dtRaw = merged.DateTimeOriginal || merged.DateTime;
+  if (dtRaw instanceof Date) {
+    details.DateTime = dtRaw.toISOString().slice(0, 19).replace('T', ' ');
+  } else {
+    details.DateTime = sv(dtRaw, '0-DATE');
+  }
+  details.Model           = sv(merged.Model);
+
+  // altitude
+  details.camera_alt_assumed = sf(merged.RelativeAltitude, 1.0);
+
+  // gimbal / flight angles
+  details.FlightPitchDegree   = sf(merged.FlightPitchDegree);
+  details.FlightYawDegree     = sf(merged.FlightYawDegree);
+  details.GimbalPitchDegree   = sf(merged.GimbalPitchDegree);
+  details.GimbalYawDegree     = sf(merged.GimbalYawDegree);
+
+  details.camera_pitch_assumed   = details.GimbalPitchDegree || PITCH_IF_NOT_READABLE;
+  details.camera_azimuth_assumed = details.GimbalYawDegree   || details.FlightYawDegree || 0;
+
+  // optics
+  details.FocalLengthIn35mmFilm = sf(merged.FocalLengthIn35mmFilm) || null;
+  details.DigitalZoomRatio      = sf(merged.DigitalZoomRatio);
+  details.ExifImageWidth        = sf(merged.ExifImageWidth  || merged.PixelXDimension || merged.ImageWidth);
+  details.ExifImageHeight       = sf(merged.ExifImageHeight || merged.PixelYDimension || merged.ImageHeight);
+
+  // model-specific overrides
+  if (details.Model === 'FC7303') {
+    details.FocalLengthIn35mmFilm = 27.4;
+  }
+  if (details.Model === 'XL801') {
+    // Autel 4T
+    details.camera_pitch_assumed   = sf(merged.Pitch);
+    details.camera_azimuth_assumed = sf(merged.Yaw);
+    details.camera_alt_assumed     = sf(merged.AboveGroundAltitude) - sf(merged.LRFTargetAbsAlt);
+    details.DigitalZoomRatio       = 0.0;
+  }
+
+  details.lon_lat_alt = [lonDec, latDec, details.camera_alt_assumed];
+
+  // icon name (strip DJI_ prefix and .JPG suffix like Python)
+  let iconname = filename;
+  if (iconname.startsWith('DJI_'))    iconname = iconname.slice(4);
+  if (iconname.toUpperCase().endsWith('.JPG')) iconname = iconname.slice(0, -4);
+  details.iconname = iconname;
+
+  makeFrameOnGround(details);
+  return details;
+}
+
+// ─── KML helpers ─────────────────────────────────────────────────────────────
+function kmlPt(lla) {
+  return `${lla[0].toFixed(6)},${lla[1].toFixed(6)},${lla[2].toFixed(1)}`;
+}
+
+function getDistanceMeters(lla1, lla2) {
+  const R = 6371000;
+  const lon1 = toRad(lla1[0]), lat1 = toRad(lla1[1]);
+  const lon2 = toRad(lla2[0]), lat2 = toRad(lla2[1]);
+  const dlon = lon2 - lon1, dlat = lat2 - lat1;
+  const a = Math.sin(dlat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dlon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function getAzimuthDeg(lla1, lla2) {
+  const lon1 = toRad(lla1[0]), lat1 = toRad(lla1[1]);
+  const lon2 = toRad(lla2[0]), lat2 = toRad(lla2[1]);
+  const dlon = lon2 - lon1;
+  const y = Math.sin(dlon) * Math.cos(lat2);
+  const x = Math.cos(lat1)*Math.sin(lat2) - Math.sin(lat1)*Math.cos(lat2)*Math.cos(dlon);
+  let az = toDeg(Math.atan2(y, x));
+  if (az < 0) az += 360;
+  return az;
+}
+
+// ─── Build KML string from current imageList ──────────────────────────────────
+function buildKml(list) {
+  const sorted = [...list].sort((a, b) => (a.DateTime > b.DateTime ? 1 : -1));
+
+  const flightCoords = sorted.map(d => kmlPt(d.lon_lat_alt)).join(' ');
+
+  let shootDirsXml = '';
+  for (const d of sorted) {
+    const pts = d.frameonground.slice(0, 2).map(kmlPt).join(' ');
+    shootDirsXml += `
+      <LineString>
+        <altitudeMode>relativeToGround</altitudeMode>
+        <coordinates>${pts}</coordinates>
+      </LineString>`;
+  }
+
+  let placemarks = '';
+  let prevLLA = null;
+  for (const d of sorted) {
+    const desc1 = `DateTime ${d.DateTime} azimuth ${d.camera_azimuth_assumed} altitude ${d.lon_lat_alt[2]}`;
+    let desc2 = `GimbalPitchDegree ${d.GimbalPitchDegree} FlightPitchDegree ${d.FlightPitchDegree} `;
+    desc2 += `pitch ${d.camera_pitch_assumed} focal35mm ${d.FocalLengthIn35mmFilm} `;
+    desc2 += `zoom ${d.DigitalZoomRatio} pixel_size_mrad ${d.pixel_size_mrad?.toFixed(3)} `;
+    if (prevLLA) {
+      desc2 += `dist_from_last ${getDistanceMeters(prevLLA, d.lon_lat_alt).toFixed(1)} `;
+      desc2 += `azimuth_from_last ${getAzimuthDeg(prevLLA, d.lon_lat_alt).toFixed(1)} `;
+    }
+    prevLLA = d.lon_lat_alt;
+
+    const frameCoords = d.frameonground.map(kmlPt).join(' ');
+    placemarks += `
+    <Folder>
+      <name>${esc(d.iconname)}</name>
+      <Placemark>
+        <name>${esc(d.iconname)}</name>
+        <description><![CDATA[<img style="max-width:500px;" src="${d.filename}">${desc1}]]></description>
+        <Point>
+          <extrude>1</extrude>
+          <altitudeMode>relativeToGround</altitudeMode>
+          <coordinates>${kmlPt(d.lon_lat_alt)}</coordinates>
+        </Point>
+      </Placemark>
+      <Placemark>
+        <name>Frame</name>
+        <description>${esc(desc2)}</description>
+        <visibility>0</visibility>
+        <styleUrl>#shootframe</styleUrl>
+        <LineString>
+          <altitudeMode>relativeToGround</altitudeMode>
+          <coordinates>${frameCoords}</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>`;
+  }
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+  <description>jpgfolder2kml — ${sorted.length} images</description>
+  <Style id="shootframe"><LineStyle><color>#7fffff00</color></LineStyle></Style>
+  <Style id="flightline"><LineStyle><color>#7fff0000</color><width>3</width></LineStyle></Style>
+  <Placemark>
+    <name>flight</name>
+    <styleUrl>#flightline</styleUrl>
+    <MultiGeometry>
+      <LineString>
+        <altitudeMode>relativeToGround</altitudeMode>
+        <coordinates>${flightCoords}</coordinates>
+      </LineString>
+    </MultiGeometry>
+  </Placemark>
+  <Placemark>
+    <name>shooting directions</name>
+    <styleUrl>#shootframe</styleUrl>
+    <MultiGeometry>${shootDirsXml}
+    </MultiGeometry>
+  </Placemark>
+  <Folder>
+    <name>Drone images (${sorted.length})</name>
+    ${placemarks}
+  </Folder>
+</Document>
+</kml>`;
+}
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ─── Process a FileList / array of Files ──────────────────────────────────────
+async function processFiles(files) {
+  const jpgs = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.jpg') || f.name.toLowerCase().endsWith('.jpeg'));
+  if (!jpgs.length) { log('No JPG files found in drop.', 'log-skip'); return; }
+
+  log(`── Processing ${jpgs.length} JPG file(s) ──`, 'log-head');
+  let ok = 0, skip = 0;
+  for (const file of jpgs) {
+    try {
+      const details = await processFile(file);
+      // deduplicate by filename (replace if already present)
+      const existing = imageList.findIndex(d => d.filename === file.name);
+      if (existing >= 0) imageList[existing] = details;
+      else imageList.push(details);
+      log(`✓ ${file.name}  ${details.lon_lat_alt[1].toFixed(5)},${details.lon_lat_alt[0].toFixed(5)}  alt=${details.lon_lat_alt[2]}m  az=${details.camera_azimuth_assumed}°`, 'log-ok');
+      ok++;
+    } catch (e) {
+      log(`✗ ${file.name}: ${e.message || e}`, 'log-skip');
+      skip++;
+    }
+  }
+  log(`Done: ${ok} added/updated, ${skip} skipped.`, 'log-info');
+  updateStatus();
+}
+
+// ─── Walk DataTransferItemList for folder + file drops ───────────────────────
+function getAllFiles(dataTransferItems) {
+  const files = [];
+  const promises = [];
+
+  function traverseEntry(entry) {
+    if (entry.isFile) {
+      promises.push(new Promise(resolve => {
+        entry.file(f => { files.push(f); resolve(); });
+      }));
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      promises.push(new Promise(resolve => {
+        function readBatch() {
+          reader.readEntries(entries => {
+            if (!entries.length) { resolve(); return; }
+            entries.forEach(traverseEntry);
+            readBatch();
+          });
+        }
+        readBatch();
+      }));
+    }
+  }
+
+  for (const item of dataTransferItems) {
+    const entry = item.webkitGetAsEntry?.();
+    if (entry) traverseEntry(entry);
+  }
+  return Promise.all(promises).then(() => files);
+}
+
+// ─── Drop zone wiring ────────────────────────────────────────────────────────
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', ()  => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', async e => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  const files = await getAllFiles(e.dataTransfer.items);
+  await processFiles(files);
+});
+
+fileInput.addEventListener('change', async () => {
+  await processFiles(fileInput.files);
+  fileInput.value = '';
+});
+
+// ─── Download KML ─────────────────────────────────────────────────────────────
+document.getElementById('btnDownload').addEventListener('click', () => {
+  const kml  = buildKml(imageList);
+  const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  // filename based on last datetime like Python
+  const sorted = [...imageList].sort((a, b) => a.DateTime > b.DateTime ? 1 : -1);
+  let ts = sorted.at(-1)?.DateTime ?? 'drone';
+  if (ts instanceof Date) ts = ts.toISOString().slice(0, 19);
+  ts = String(ts).replace(/:/g, '-').replace(/ /g, 'T');
+  a.download = `drone_${ts}.kml`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ─── Clear ────────────────────────────────────────────────────────────────────
+document.getElementById('btnClear').addEventListener('click', () => {
+  imageList.length = 0;
+  logEl.innerHTML  = '';
+  updateStatus();
+});
+</script>
+</body>
+</html>
