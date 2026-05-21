@@ -1,0 +1,830 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Izveidot KML Režģi</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f766e">
+  <style>
+    :root {
+      --bg0: #f7f5ef;
+      --bg1: #e8dfd1;
+      --card: #fffdf8;
+      --ink: #1d2a2e;
+      --muted: #52646a;
+      --accent: #0f766e;
+      --accent-strong: #0b5f58;
+      --ring: #f59e0b;
+      --danger: #b91c1c;
+      --ok: #166534;
+      --shadow: 0 20px 50px rgba(21, 45, 52, 0.16);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "IBM Plex Sans", "Noto Sans", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 15% 20%, rgba(15, 118, 110, 0.2), transparent 45%),
+        radial-gradient(circle at 88% 12%, rgba(245, 158, 11, 0.22), transparent 38%),
+        linear-gradient(145deg, var(--bg0), var(--bg1));
+      display: grid;
+      place-items: center;
+      padding: 20px;
+    }
+
+    .panel {
+      width: min(780px, 100%);
+      background: var(--card);
+      border: 1px solid rgba(29, 42, 46, 0.12);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .hero {
+      padding: 24px 24px 10px;
+      background: linear-gradient(120deg, rgba(15, 118, 110, 0.08), rgba(245, 158, 11, 0.1));
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.3rem, 2.2vw, 1.8rem);
+      letter-spacing: 0.02em;
+    }
+
+    .subtitle {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 0.96rem;
+      line-height: 1.45;
+    }
+
+    form {
+      padding: 18px 24px 24px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      font-size: 0.86rem;
+      color: var(--muted);
+    }
+
+    input {
+      border: 1px solid rgba(29, 42, 46, 0.25);
+      border-radius: 11px;
+      padding: 11px 12px;
+      font-size: 0.96rem;
+      color: var(--ink);
+      background: #fff;
+      transition: border-color 120ms ease, box-shadow 120ms ease;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: var(--ring);
+      box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.22);
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 16px;
+      color: #fff;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+      cursor: pointer;
+      transition: transform 120ms ease, filter 120ms ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.04);
+    }
+
+    .status {
+      min-height: 1.2em;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    .status.ok {
+      color: var(--ok);
+    }
+
+    .status.err {
+      color: var(--danger);
+    }
+
+    .hint {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.45;
+    }
+
+    .checkline {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .checkline input {
+      width: 18px;
+      height: 18px;
+      margin: 0;
+      accent-color: var(--accent);
+    }
+
+    .grid-2 {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .grid-3 {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+
+    @media (max-width: 760px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .grid-2, .grid-3 {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="panel">
+    <section class="hero">
+      <h1>KML Režģis</h1>
+      <p class="subtitle">Šeit var izveidot KML failu ar 10x10 režģi.</p>
+    </section>
+
+    <form id="kmlForm" novalidate>
+      <fieldset style="border:0;padding:0 0 10px 0;margin:0 0 10px 0">
+        <legend style="font-weight:600;font-size:1.05em;margin-bottom:4px">Režģa centrs</legend>
+        <div class="grid-2">
+          <label>
+            MGRS (Prioritāte, ja norādīts)
+            <input id="mgrs" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="e.g. 35VLD2445116162">
+          </label>
+          <div class="grid-2">
+            <label>
+              Platums (Latitude)
+              <input id="lat" type="text" inputmode="decimal" pattern="^-?\d+(\.\d+)?$" placeholder="e.g. 56.987" autocomplete="off">
+            </label>
+            <label>
+              Garums (Longitude)
+              <input id="lon" type="text" inputmode="decimal" pattern="^-?\d+(\.\d+)?$" placeholder="e.g. 21.987" autocomplete="off">
+            </label>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset style="border:0;padding:0 0 10px 0;margin:0 0 10px 0">
+        <legend style="font-weight:600;font-size:1.05em;margin-bottom:4px">Režģis</legend>
+        <div class="grid-3">
+          <label>
+            Režģa platums (metros)
+            <input id="size" type="text" inputmode="decimal" pattern="^\d+(\.\d+)?$" value="1000" placeholder="e.g. 1000" autocomplete="off">
+          </label>
+          <label>
+            Režģa kolonnas (X)
+            <input id="countX" type="number" step="1" min="2" max="25" value="10" required>
+          </label>
+          <label>
+            Režģa rindas (Y)
+            <input id="countY" type="number" step="1" min="2" max="25" value="10" required>
+          </label>
+        </div>
+        <label class="checkline">
+          <input id="labelEverySquare" type="checkbox" checked>
+          Etiķeti likt katrā rūtiņā (atceliet, lai liktu tikai rindu/kolonnu etiķetes)
+        </label>
+        <label class="checkline">
+          <input id="drawKeypad" type="checkbox" checked>
+          Zīmēt keypad
+        </label>
+
+      </fieldset>
+
+      <fieldset style="border:0;padding:0 0 10px 0;margin:0 0 10px 0">
+        <legend style="font-weight:600;font-size:1.05em;margin-bottom:4px">Fails lejupielādei</legend>
+        <label>
+          Faila nosaukums
+          <input id="filename" type="text" value="" placeholder="filename will auto-update">
+        </label>
+      </fieldset>
+
+      <div class="actions">
+        <button type="submit">Ģenerēt un lejupielādēt KML</button>
+        <div id="status" class="status" aria-live="polite"></div>
+      </div>
+    </form>
+
+    <details style="border-top:1px solid rgba(29,42,46,0.1);padding:16px 24px 20px;font-size:0.88rem;color:var(--muted);line-height:1.6">
+      <summary style="font-weight:600;font-size:0.95rem;color:var(--ink);cursor:pointer;user-select:none;margin-bottom:8px">Palīdzība / LASIMANI</summary>
+      <p style="margin:0 0 10px"><strong>KML Režģis</strong> — izveido burtu un ciparu etiķetēm apzīmētu režģi kā KML failu, ko var atvērt Google Earth vai jebkurā saderīgā GIS lietotnē. </p>
+      <ul style="margin:0;padding-left:1.3em">
+        <li>Nav nepieciešams interneta savienojums vai serveris; viss darbojas lokāli jūsu pārlūkprogrammā.</li>
+        <li><strong>Centrs</strong> — iestatiet režģa centru, izmantojot MGRS (prioritāte, ja norādīts) vai platumu/garumu. 
+          <strong>Padoms:</strong> centra koordinātu var padot arī adresē. Piemērs - <a style="background:rgba(0,0,0,0.06);border-radius:4px;padding:1px 5px" href="?57.182,24.850">?57.182,24.850</a> vai <a style="background:rgba(0,0,0,0.06);border-radius:4px;padding:1px 5px" href="?35VLD2445116162">?35VLD2445116162</a>.</li>
+        <li><strong>Režģa platums</strong> — režģa kopējais platums metros; šūnas izmērs tiek iegūts no kolonnu skaita.</li>
+        <li><strong>Režģa kolonnas / rindas</strong> — kolonnu un rindu skaits (katrs no 2 līdz 25). Rindas tiek apzīmētas ar burtiem no augšas (A–Z); kolonnas tiek numurētas no kreisās puses.</li>
+        <li><strong>Etiķeti likt katrā rūtiņā</strong> — ja atzīmēts, katrai šūnai tiek piešķirta sava etiķete (piemēram, <em>A1</em>); ja nav atzīmēts, tiek izvietotas tikai rindu un kolonnu malu etiķetes.</li>
+        <li>Ģenerētajā KML ietilpst "keypad" režģītis. "B2 keypad 7" nozīmē "B2 rūtiņas kreisais apakšējais stūris".</li>
+      </ul>
+      <img src="example.png" alt="KML grid example" style="margin-top:14px;max-width:100%;border-radius:10px;border:1px solid rgba(29,42,46,0.12);">
+    </details>
+  </main>
+
+  <script>
+/**
+ * Minified by jsDelivr using Terser v5.39.0.
+ * Original file: /npm/mgrs@1.0.0/dist/mgrs.js
+ */
+!function(t,e){"object"==typeof exports&&"undefined"!=typeof module?e(exports):"function"==typeof define&&define.amd?define(["exports"],e):e(t.mgrs=t.mgrs||{})}(this,(function(t){"use strict";var e="AJSAJS",r="AFAFAF",a=65,n=73,o=79,i=86,s=90,h={forward:c,inverse:f,toPoint:u};function c(t,h){return h=h||5,function(t,h){var c="00000"+t.easting,f="00000"+t.northing;return t.zoneNumber+t.zoneLetter+(A=t.easting,z=t.northing,w=t.zoneNumber,C=v(w),P=Math.floor(A/1e5),S=Math.floor(z/1e5)%20,u=P,l=S,M=C,b=M-1,g=e.charCodeAt(b),d=r.charCodeAt(b),m=g+u-1,k=d+l,p=!1,m>s&&(m=m-s+a-1,p=!0),(m===n||g<n&&m>n||(m>n||g<n)&&p)&&m++,(m===o||g<o&&m>o||(m>o||g<o)&&p)&&++m===n&&m++,m>s&&(m=m-s+a-1),k>i?(k=k-i+a-1,p=!0):p=!1,(k===n||d<n&&k>n||(k>n||d<n)&&p)&&k++,(k===o||d<o&&k>o||(k>o||d<o)&&p)&&++k===n&&k++,k>i&&(k=k-i+a-1),String.fromCharCode(m)+String.fromCharCode(k))+c.substr(c.length-5,h)+f.substr(f.length-5,h);var u,l,M,b,g,d,m,k,p;var A,z,w,C,P,S}(function(t){var e,r,a,n,o,i,s,h,c=t.lat,f=t.lon,u=6378137,M=.00669438,b=.9996,v=l(c),d=l(f);h=Math.floor((f+180)/6)+1,180===f&&(h=60);c>=56&&c<64&&f>=3&&f<12&&(h=32);c>=72&&c<84&&(f>=0&&f<9?h=31:f>=9&&f<21?h=33:f>=21&&f<33?h=35:f>=33&&f<42&&(h=37));s=l(6*(h-1)-180+3),e=M/(1-M),r=u/Math.sqrt(1-M*Math.sin(v)*Math.sin(v)),a=Math.tan(v)*Math.tan(v),n=e*Math.cos(v)*Math.cos(v),o=Math.cos(v)*(d-s),i=u*((1-M/4-3*M*M/64-5*M*M*M/256)*v-(3*M/8+3*M*M/32+45*M*M*M/1024)*Math.sin(2*v)+(15*M*M/256+45*M*M*M/1024)*Math.sin(4*v)-35*M*M*M/3072*Math.sin(6*v));var m=b*r*(o+(1-a+n)*o*o*o/6+(5-18*a+a*a+72*n-58*e)*o*o*o*o*o/120)+5e5,k=b*(i+r*Math.tan(v)*(o*o/2+(5-a+9*n+4*n*n)*o*o*o*o/24+(61-58*a+a*a+600*n-330*e)*o*o*o*o*o*o/720));c<0&&(k+=1e7);return{northing:Math.round(k),easting:Math.round(m),zoneNumber:h,zoneLetter:g(c)}}({lat:t[1],lon:t[0]}),h)}function f(t){var e=b(d(t.toUpperCase()));return e.lat&&e.lon?[e.lon,e.lat,e.lon,e.lat]:[e.left,e.bottom,e.right,e.top]}function u(t){var e=b(d(t.toUpperCase()));return e.lat&&e.lon?[e.lon,e.lat]:[(e.left+e.right)/2,(e.top+e.bottom)/2]}function l(t){return t*(Math.PI/180)}function M(t){return t/Math.PI*180}function b(t){var e=t.northing,r=t.easting,a=t.zoneLetter,n=t.zoneNumber;if(n<0||n>60)return null;var o,i,s,h,c,f,u,l,g,v=.9996,d=6378137,m=.00669438,k=(1-Math.sqrt(.99330562))/(1+Math.sqrt(.99330562)),p=r-5e5,A=e;a<"N"&&(A-=1e7),u=6*(n-1)-180+3,o=.006739496752268451,g=(l=A/v/6367449.145945056)+(3*k/2-27*k*k*k/32)*Math.sin(2*l)+(21*k*k/16-55*k*k*k*k/32)*Math.sin(4*l)+151*k*k*k/96*Math.sin(6*l),i=d/Math.sqrt(1-m*Math.sin(g)*Math.sin(g)),s=Math.tan(g)*Math.tan(g),h=o*Math.cos(g)*Math.cos(g),c=.99330562*d/Math.pow(1-m*Math.sin(g)*Math.sin(g),1.5),f=p/(i*v);var z=g-i*Math.tan(g)/c*(f*f/2-(5+3*s+10*h-4*h*h-9*o)*f*f*f*f/24+(61+90*s+298*h+45*s*s-1.6983531815716497-3*h*h)*f*f*f*f*f*f/720);z=M(z);var w,C=(f-(1+2*s+h)*f*f*f/6+(5-2*h+28*s-3*h*h+8*o+24*s*s)*f*f*f*f*f/120)/Math.cos(g);if(C=u+M(C),t.accuracy){var P=b({northing:t.northing+t.accuracy,easting:t.easting+t.accuracy,zoneLetter:t.zoneLetter,zoneNumber:t.zoneNumber});w={top:P.lat,right:P.lon,bottom:z,left:C}}else w={lat:z,lon:C};return w}function g(t){var e="Z";return 84>=t&&t>=72?e="X":72>t&&t>=64?e="W":64>t&&t>=56?e="V":56>t&&t>=48?e="U":48>t&&t>=40?e="T":40>t&&t>=32?e="S":32>t&&t>=24?e="R":24>t&&t>=16?e="Q":16>t&&t>=8?e="P":8>t&&t>=0?e="N":0>t&&t>=-8?e="M":-8>t&&t>=-16?e="L":-16>t&&t>=-24?e="K":-24>t&&t>=-32?e="J":-32>t&&t>=-40?e="H":-40>t&&t>=-48?e="G":-48>t&&t>=-56?e="F":-56>t&&t>=-64?e="E":-64>t&&t>=-72?e="D":-72>t&&t>=-80&&(e="C"),e}function v(t){var e=t%6;return 0===e&&(e=6),e}function d(t){if(t&&0===t.length)throw"MGRSPoint coverting from nothing";for(var h,c=t.length,f=null,u="",l=0;!/[A-Z]/.test(h=t.charAt(l));){if(l>=2)throw"MGRSPoint bad conversion from: "+t;u+=h,l++}var M=parseInt(u,10);if(0===l||l+3>c)throw"MGRSPoint bad conversion from: "+t;var b=t.charAt(l++);if(b<="A"||"B"===b||"Y"===b||b>="Z"||"I"===b||"O"===b)throw"MGRSPoint zone letter "+b+" not handled: "+t;f=t.substring(l,l+=2);for(var g=v(M),d=function(t,r){var i=e.charCodeAt(r-1),h=1e5,c=!1;for(;i!==t.charCodeAt(0);){if(++i===n&&i++,i===o&&i++,i>s){if(c)throw"Bad character: "+t;i=a,c=!0}h+=1e5}return h}(f.charAt(0),g),k=function(t,e){if(t>"V")throw"MGRSPoint given invalid Northing "+t;var s=r.charCodeAt(e-1),h=0,c=!1;for(;s!==t.charCodeAt(0);){if(++s===n&&s++,s===o&&s++,s>i){if(c)throw"Bad character: "+t;s=a,c=!0}h+=1e5}return h}(f.charAt(1),g);k<m(b);)k+=2e6;var p=c-l;if(p%2!=0)throw"MGRSPoint has to have an even number \nof digits after the zone letter and two 100km letters - front \nhalf for easting meters, second half for \nnorthing meters"+t;var A,z,w,C=p/2,P=0,S=0;return C>0&&(A=1e5/Math.pow(10,C),z=t.substring(l,l+C),P=parseFloat(z)*A,w=t.substring(l+C),S=parseFloat(w)*A),{easting:P+d,northing:S+k,zoneLetter:b,zoneNumber:M,accuracy:A}}function m(t){var e;switch(t){case"C":e=11e5;break;case"D":e=2e6;break;case"E":e=28e5;break;case"F":e=37e5;break;case"G":e=46e5;break;case"H":e=55e5;break;case"J":e=64e5;break;case"K":e=73e5;break;case"L":e=82e5;break;case"M":e=91e5;break;case"N":e=0;break;case"P":e=8e5;break;case"Q":e=17e5;break;case"R":e=26e5;break;case"S":e=35e5;break;case"T":e=44e5;break;case"U":e=53e5;break;case"V":e=62e5;break;case"W":e=7e6;break;case"X":e=79e5;break;default:e=-1}if(e>=0)return e;throw"Invalid zone letter: "+t}t.default=h,t.forward=c,t.inverse=f,t.toPoint=u,Object.defineProperty(t,"__esModule",{value:!0})}));
+  </script>
+  <script>
+    (function () {
+      const WGS84_A = 6378137.0;
+      const WGS84_F = 1 / 298.257223563;
+      const K0 = 0.9996;
+      const E2 = WGS84_F * (2 - WGS84_F);
+      const E_P2 = E2 / (1 - E2);
+
+      const form = document.getElementById("kmlForm");
+      const statusEl = document.getElementById("status");
+
+      function setStatus(message, isError) {
+        statusEl.textContent = message;
+        statusEl.className = "status " + (isError ? "err" : "ok");
+      }
+
+      function degToRad(value) {
+        return value * (Math.PI / 180);
+      }
+
+      function radToDeg(value) {
+        return value * (180 / Math.PI);
+      }
+
+      function utmZoneFromLon(lon) {
+        return Math.max(1, Math.min(60, Math.floor((lon + 180) / 6) + 1));
+      }
+
+      function lonOriginDeg(zone) {
+        return (zone - 1) * 6 - 180 + 3;
+      }
+
+      function latLonToUtm(latDeg, lonDeg, forcedZone) {
+        const zone = forcedZone || utmZoneFromLon(lonDeg);
+        const northernHemisphere = latDeg >= 0;
+        const latRad = degToRad(latDeg);
+        const lonRad = degToRad(lonDeg);
+        const lonOriginRad = degToRad(lonOriginDeg(zone));
+
+        const sinLat = Math.sin(latRad);
+        const cosLat = Math.cos(latRad);
+        const tanLat = Math.tan(latRad);
+
+        const n = WGS84_A / Math.sqrt(1 - E2 * sinLat * sinLat);
+        const t = tanLat * tanLat;
+        const c = E_P2 * cosLat * cosLat;
+        const a = cosLat * (lonRad - lonOriginRad);
+
+        const m = WGS84_A * (
+          (1 - E2 / 4 - 3 * E2 * E2 / 64 - 5 * E2 * E2 * E2 / 256) * latRad -
+          (3 * E2 / 8 + 3 * E2 * E2 / 32 + 45 * E2 * E2 * E2 / 1024) * Math.sin(2 * latRad) +
+          (15 * E2 * E2 / 256 + 45 * E2 * E2 * E2 / 1024) * Math.sin(4 * latRad) -
+          (35 * E2 * E2 * E2 / 3072) * Math.sin(6 * latRad)
+        );
+
+        const easting = K0 * n * (
+          a +
+          ((1 - t + c) * Math.pow(a, 3)) / 6 +
+          ((5 - 18 * t + t * t + 72 * c - 58 * E_P2) * Math.pow(a, 5)) / 120
+        ) + 500000.0;
+
+        let northing = K0 * (
+          m + n * tanLat * (
+            (a * a) / 2 +
+            ((5 - t + 9 * c + 4 * c * c) * Math.pow(a, 4)) / 24 +
+            ((61 - 58 * t + t * t + 600 * c - 330 * E_P2) * Math.pow(a, 6)) / 720
+          )
+        );
+
+        if (!northernHemisphere) {
+          northing += 10000000.0;
+        }
+
+        return { zone, northernHemisphere, easting, northing };
+      }
+
+      function utmToLatLon(easting, northing, zone, northernHemisphere) {
+        const x = easting - 500000.0;
+        let y = northing;
+
+        if (!northernHemisphere) {
+          y -= 10000000.0;
+        }
+
+        const lonOriginRad = degToRad(lonOriginDeg(zone));
+        const m = y / K0;
+        const mu = m / (WGS84_A * (1 - E2 / 4 - 3 * E2 * E2 / 64 - 5 * E2 * E2 * E2 / 256));
+
+        const e1 = (1 - Math.sqrt(1 - E2)) / (1 + Math.sqrt(1 - E2));
+
+        const j1 = (3 * e1 / 2) - (27 * Math.pow(e1, 3) / 32);
+        const j2 = (21 * e1 * e1 / 16) - (55 * Math.pow(e1, 4) / 32);
+        const j3 = (151 * Math.pow(e1, 3) / 96);
+        const j4 = (1097 * Math.pow(e1, 4) / 512);
+
+        const fp = mu +
+          j1 * Math.sin(2 * mu) +
+          j2 * Math.sin(4 * mu) +
+          j3 * Math.sin(6 * mu) +
+          j4 * Math.sin(8 * mu);
+
+        const sinFp = Math.sin(fp);
+        const cosFp = Math.cos(fp);
+        const tanFp = Math.tan(fp);
+
+        const c1 = E_P2 * cosFp * cosFp;
+        const t1 = tanFp * tanFp;
+        const n1 = WGS84_A / Math.sqrt(1 - E2 * sinFp * sinFp);
+        const r1 = (WGS84_A * (1 - E2)) / Math.pow(1 - E2 * sinFp * sinFp, 1.5);
+        const d = x / (n1 * K0);
+
+        const latRad = fp - (n1 * tanFp / r1) * (
+          (d * d) / 2 -
+          ((5 + 3 * t1 + 10 * c1 - 4 * c1 * c1 - 9 * E_P2) * Math.pow(d, 4)) / 24 +
+          ((61 + 90 * t1 + 298 * c1 + 45 * t1 * t1 - 252 * E_P2 - 3 * c1 * c1) * Math.pow(d, 6)) / 720
+        );
+
+        const lonRad = lonOriginRad + (
+          d -
+          ((1 + 2 * t1 + c1) * Math.pow(d, 3)) / 6 +
+          ((5 - 2 * c1 + 28 * t1 - 3 * c1 * c1 + 8 * E_P2 + 24 * t1 * t1) * Math.pow(d, 5)) / 120
+        ) / cosFp;
+
+        return { lat: radToDeg(latRad), lon: radToDeg(lonRad) };
+      }
+
+      function escapeXml(text) {
+        return String(text)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&apos;");
+      }
+
+      function colorAbgr(a, b, g, r) {
+        return [a, b, g, r].map((value) => value.toString(16).padStart(2, "0")).join("");
+      }
+
+      function kmlLineString(name, coordsLonLat, styleUrl) {
+        const coordText = coordsLonLat
+          .map((point) => point.lon.toFixed(8) + "," + point.lat.toFixed(8) + ",0")
+          .join(" ");
+
+        return "\n    <Placemark>\n" +
+          "      <name>" + escapeXml(name) + "</name>\n" +
+          "      <styleUrl>" + styleUrl + "</styleUrl>\n" +
+          "      <LineString>\n" +
+          "        <tessellate>1</tessellate>\n" +
+          "        <coordinates>" + coordText + "</coordinates>\n" +
+          "      </LineString>\n" +
+          "    </Placemark>";
+      }
+
+      function kmlLineStringGeometry(coordsLonLat) {
+        const coordText = coordsLonLat
+          .map((point) => point.lon.toFixed(8) + "," + point.lat.toFixed(8) + ",0")
+          .join(" ");
+        return "\n        <LineString>\n" +
+          "          <tessellate>1</tessellate>\n" +
+          "          <coordinates>" + coordText + "</coordinates>\n" +
+          "        </LineString>";
+      }
+
+      function kmlMultiLinePlacemark(name, lineSets, styleUrl) {
+        return "\n      <Placemark>\n" +
+          "        <name>" + escapeXml(name) + "</name>\n" +
+          "        <styleUrl>" + styleUrl + "</styleUrl>\n" +
+          "        <MultiGeometry>" +
+          lineSets.map(kmlLineStringGeometry).join("") +
+          "\n        </MultiGeometry>\n" +
+          "      </Placemark>";
+      }
+
+      // Builds a single continuous polyline covering all horizontal and vertical
+      // grid lines using a boustrophedon (snake) pattern — no diagonal jumps ever.
+      // Phase 1: snake left↔right across all (ny+1) horizontal lines, bottom to top.
+      // Phase 2: snake down↕up across all (nx+1) vertical lines, starting from
+      //   wherever phase 1 ended and stepping only along the already-drawn top/bottom edges.
+      function buildSnakePath(x0, x1, y0, y1, nx, ny, cs, zone, northern) {
+        const pts = [];
+        for (let i = 0; i <= ny; i++) {
+          const y = y0 + i * cs;
+          if (i % 2 === 0) {
+            pts.push({ x: x0, y });
+            pts.push({ x: x1, y });
+          } else {
+            pts.push({ x: x1, y });
+            pts.push({ x: x0, y });
+          }
+        }
+        // After phase 1: if ny even, last point is (x1,y1); if odd, (x0,y1).
+        const fromRight = (ny % 2 === 0);
+        for (let j = 0; j <= nx; j++) {
+          const x = fromRight ? (x1 - j * cs) : (x0 + j * cs);
+          if (j % 2 === 0) {
+            if (j > 0) pts.push({ x, y: y1 }); // step along top edge
+            pts.push({ x, y: y0 });             // draw line downward
+          } else {
+            pts.push({ x, y: y0 });             // step along bottom edge
+            pts.push({ x, y: y1 });             // draw line upward
+          }
+        }
+        return pts.map(p => utmToLatLon(p.x, p.y, zone, northern));
+      }
+
+      function kmlLabel(name, lon, lat, styleUrl) {
+        return "\n    <Placemark>\n" +
+          "      <name>" + escapeXml(name) + "</name>\n" +
+          "      <styleUrl>" + styleUrl + "</styleUrl>\n" +
+          "      <Point>\n" +
+          "        <coordinates>" + lon.toFixed(8) + "," + lat.toFixed(8) + ",0</coordinates>\n" +
+          "      </Point>\n" +
+          "    </Placemark>";
+      }
+
+      function columnLabel(index) {
+        return String(index + 1);
+      }
+
+      function rowLabel(index) {
+        if (index < 26) {
+          return String.fromCharCode(65 + index);
+        }
+        return "R" + String(index + 1);
+      }
+
+      function generateGridKml(lat, lon, gridWidthM, countX, countY, labelEverySquare, drawKeypad) {
+        const centerUtm = latLonToUtm(lat, lon);
+        const zone = centerUtm.zone;
+        const northern = centerUtm.northernHemisphere;
+
+        const cellSize = gridWidthM / countX;
+        const gridHeightM = cellSize * countY;
+        const halfW = gridWidthM / 2;
+        const halfH = gridHeightM / 2;
+        const minX = centerUtm.easting - halfW;
+        const maxX = centerUtm.easting + halfW;
+        const minY = centerUtm.northing - halfH;
+        const maxY = centerUtm.northing + halfH;
+
+        const labelPlacemarks = [];
+        const keypadLabelPlacemarks = [];
+
+        const gridSnakePath = buildSnakePath(minX, maxX, minY, maxY, countX, countY, cellSize, zone, northern);
+
+        if (labelEverySquare) {
+          for (let rowIndex = 0; rowIndex < countY; rowIndex += 1) {
+            const y = minY + ((countY - 1 - rowIndex) * cellSize) + (cellSize / 2);
+            for (let colIndex = 0; colIndex < countX; colIndex += 1) {
+              const x = minX + (colIndex * cellSize) + (cellSize / 2);
+              const labelPos = utmToLatLon(x, y, zone, northern);
+              const label = rowLabel(rowIndex) + columnLabel(colIndex);
+              labelPlacemarks.push(kmlLabel(label, labelPos.lon, labelPos.lat, "#cellLabel"));
+            }
+          }
+        } else {
+          for (let colIndex = 0; colIndex < countX; colIndex += 1) {
+            const x = minX + (colIndex * cellSize) + (cellSize / 2);
+            const p = utmToLatLon(x, maxY + (cellSize * 0.12), zone, northern);
+            labelPlacemarks.push(kmlLabel(columnLabel(colIndex), p.lon, p.lat, "#cellLabel"));
+          }
+          for (let rowIndex = 0; rowIndex < countY; rowIndex += 1) {
+            const y = minY + ((countY - 1 - rowIndex) * cellSize) + (cellSize / 2);
+            const p = utmToLatLon(minX - (cellSize * 0.12), y, zone, northern);
+            labelPlacemarks.push(kmlLabel(rowLabel(rowIndex), p.lon, p.lat, "#cellLabel"));
+          }
+        }
+
+        let keypadFolder = "";
+        if (drawKeypad) {
+          const cheatMinX = minX;
+          const cheatMaxX = minX + cellSize;
+          const cheatMinY = maxY;
+          const cheatMaxY = maxY + cellSize;
+          const cheatThird = cellSize / 3;
+
+          const keypadSnakePath = buildSnakePath(cheatMinX, cheatMaxX, cheatMinY, cheatMaxY, 3, 3, cheatThird, zone, northern);
+
+          const keypadTitle = utmToLatLon((cheatMinX + cheatMaxX) / 2, cheatMaxY + (cellSize * 0.15), zone, northern);
+          keypadLabelPlacemarks.push(kmlLabel("keypad", keypadTitle.lon, keypadTitle.lat, "#cellLabel"));
+
+          const keypadRows = [
+            [1, 2, 3],
+            [4, 5, 6],
+            [7, 8, 9]
+          ];
+          for (let r = 0; r < 3; r += 1) {
+            for (let c = 0; c < 3; c += 1) {
+              const x = cheatMinX + (c * cheatThird) + (cheatThird / 2);
+              const y = cheatMaxY - (r * cheatThird) - (cheatThird / 2);
+              const p = utmToLatLon(x, y, zone, northern);
+              keypadLabelPlacemarks.push(kmlLabel(String(keypadRows[r][c]), p.lon, p.lat, "#cellLabel"));
+            }
+          }
+
+          keypadFolder =
+            "    <Folder>\n" +
+            "      <name>keypad</name>" +
+            kmlLineString("keypad", keypadSnakePath, "#boundary") +
+            keypadLabelPlacemarks.join("") +
+            "\n    </Folder>\n";
+        }
+
+        const folders =
+          "\n    <Folder>\n" +
+          "      <name>grid</name>" +
+          kmlLineString("grid", gridSnakePath, "#grid") +
+          "\n    </Folder>\n" +
+          keypadFolder +
+          "    <Folder>\n" +
+          "      <name>labels</name>" +
+          labelPlacemarks.join("") +
+          "\n    </Folder>\n";
+
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+          "<kml xmlns=\"http://www.opengis.net/kml/2.2\">\n" +
+          "  <Document>\n" +
+          "    <name>Režģis " + lat.toFixed(3) + " " + lon.toFixed(3) + "</name>\n" +
+          "    <description>Centrs " + lat.toFixed(4) + "," + lon.toFixed(4) +
+          "; šūnas izmērs " + cellSize.toFixed(1) +
+          " m</description>\n\n" +
+          "    <Style id=\"grid\">\n" +
+          "      <LineStyle>\n" +
+          "        <color>" + colorAbgr(180, 0, 255, 0) + "</color>\n" +
+          "        <width>1</width>\n" +
+          "      </LineStyle>\n" +
+          "    </Style>\n\n" +
+          "    <Style id=\"boundary\">\n" +
+          "      <LineStyle>\n" +
+          "        <color>" + colorAbgr(255, 255, 255, 255) + "</color>\n" +
+          "        <width>2</width>\n" +
+          "      </LineStyle>\n" +
+          "      <PolyStyle><fill>0</fill></PolyStyle>\n" +
+          "    </Style>\n\n" +
+          "    <Style id=\"cellLabel\">\n" +
+          "      <LabelStyle>\n" +
+          "        <color>" + colorAbgr(255, 0, 255, 255) + "</color>\n" +
+          "        <scale>1.4</scale>\n" +
+          "      </LabelStyle>\n" +
+          "      <IconStyle><scale>0.1</scale></IconStyle>\n" +
+            "    </Style>\n" +
+            folders +
+          "  </Document>\n" +
+          "</kml>\n";
+      }
+
+
+      // MGRS to lat/lon conversion via bundled open-source library.
+      function parseMgrs(mgrs) {
+        const normalized = (mgrs || "").toUpperCase().replace(/\s+/g, "");
+        if (!normalized) return null;
+        if (!window.mgrs || typeof window.mgrs.toPoint !== "function") {
+          throw new Error("MGRS library not loaded");
+        }
+        try {
+          const point = window.mgrs.toPoint(normalized);
+          if (!Array.isArray(point) || point.length < 2) return null;
+          const lon = Number(point[0]);
+          const lat = Number(point[1]);
+          if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+          if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+          return { lat, lon };
+        } catch (_err) {
+          return null;
+        }
+      }
+
+      function normalizeFilename(name) {
+        const trimmed = (name || "").trim();
+        const base = trimmed === "" ? "grid3.kml" : trimmed;
+        return base.toLowerCase().endsWith(".kml") ? base : base + ".kml";
+      }
+
+      // Compose filename from params
+      function suggestFilename(mgrs, lat, lon, size) {
+        let center = "";
+        if (mgrs && mgrs.trim() !== "") {
+          center = mgrs.trim().replace(/\s+/g, "");
+        } else if (lat !== undefined && lon !== undefined && lat !== "" && lon !== "") {
+          const latf = parseFloat(lat);
+          const lonf = parseFloat(lon);
+          if (isFinite(latf) && isFinite(lonf)) {
+            center = latf.toFixed(3) + "_" + lonf.toFixed(3);
+          }
+        }
+        let width = "";
+        const sizef = parseFloat(size);
+        if (isFinite(sizef) && sizef > 0) {
+          width = (sizef % 1 === 0 ? String(Math.round(sizef)) : String(sizef)) + "m";
+        }
+        return normalizeFilename(["GRG", center, width].filter(Boolean).join("_") + ".kml");
+      }
+
+      function downloadTextFile(filename, text) {
+        const blob = new Blob([text], { type: "application/vnd.google-earth.kml+xml;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+
+      // Track if user has manually edited filename
+      let filenameTouched = false;
+      const filenameInput = document.getElementById("filename");
+      filenameInput.addEventListener("input", function() {
+        filenameTouched = true;
+      });
+
+      function updateFilename() {
+        if (filenameTouched) return;
+        const mgrs = document.getElementById("mgrs").value;
+        const lat = document.getElementById("lat").value;
+        const lon = document.getElementById("lon").value;
+        const size = document.getElementById("size").value;
+        filenameInput.value = suggestFilename(mgrs, lat, lon, size);
+      }
+
+      // Update filename on any param change
+      ["mgrs", "lat", "lon", "size"].forEach(function(id) {
+        const el = document.getElementById(id);
+        if (el) {
+          el.addEventListener("input", function() {
+            filenameTouched = false;
+            updateFilename();
+          });
+        }
+      });
+      // Coordinate pair parsing on the lat field (blur or Enter).
+      // Accepted formats: "56.123 23.231", "56.123,23.234", "56.123, 23.234"
+      (function () {
+        const latEl = document.getElementById("lat");
+        const lonEl = document.getElementById("lon");
+        function tryParsePair() {
+          const m = latEl.value.trim().match(/^(-?\d+(?:\.\d+)?)°?[\s,]+(-?\d+(?:\.\d+)?)°?$/);
+          if (!m) return;
+          const a = parseFloat(m[1]);
+          const b = parseFloat(m[2]);
+          if (!isFinite(a) || !isFinite(b)) return;
+          latEl.value = a;
+          lonEl.value = b;
+          filenameTouched = false;
+          updateFilename();
+        }
+        latEl.addEventListener("blur", tryParsePair);
+        latEl.addEventListener("keydown", function (e) {
+          if (e.key === "Enter") tryParsePair();
+        });
+      }());
+
+      // Prefill from URL params: ?34ABC1234512345 or ?54.45,26.2345
+      (function prefillFromUrl() {
+        const raw = (window.location.search || "").replace(/^\?/, "").trim();
+        if (!raw) return;
+        // Lat,lon: two numbers separated by comma
+        const llMatch = raw.match(/^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/);
+        if (llMatch) {
+          document.getElementById("lat").value = llMatch[1];
+          document.getElementById("lon").value = llMatch[2];
+          return;
+        }
+        // MGRS: zone digits + band letter + two square letters + optional even number of digits
+        const mgrsMatch = raw.match(/^([0-9]{1,2}[C-HJ-NP-X][A-HJ-NP-Z]{2})(\d{2,10})?$/i);
+        if (mgrsMatch) {
+          document.getElementById("mgrs").value = raw.toUpperCase();
+        }
+      }());
+
+      // Initial filename
+      updateFilename();
+
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+
+        const mgrs = document.getElementById("mgrs").value.trim();
+        let lat = document.getElementById("lat").value.trim();
+        let lon = document.getElementById("lon").value.trim();
+        const size = Number(document.getElementById("size").value);
+        const countX = Number(document.getElementById("countX").value);
+        const countY = Number(document.getElementById("countY").value);
+        const labelEverySquare = document.getElementById("labelEverySquare").checked;
+        const drawKeypad = document.getElementById("drawKeypad").checked;
+        const filename = normalizeFilename(document.getElementById("filename").value);
+
+        // MGRS takes priority
+        let center = null;
+        if (mgrs && mgrs !== "") {
+          center = parseMgrs(mgrs);
+          if (!center) {
+            setStatus("Nederīga MGRS virkne.", true);
+            return;
+          }
+          lat = center.lat;
+          lon = center.lon;
+        } else {
+          lat = Number(lat);
+          lon = Number(lon);
+          if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+            setStatus("Platumam jābūt no -90 līdz 90.", true);
+            return;
+          }
+          if (!Number.isFinite(lon) || lon < -180 || lon > 180) {
+            setStatus("Garumam jābūt no -180 līdz 180.", true);
+            return;
+          }
+          if (lat === 0 && lon === 0) {
+            setStatus("Ievadiet derīgas centra koordinātes (0°, 0° nav pieļaujams).", true);
+            return;
+          }
+        }
+        if (!Number.isFinite(size) || size <= 0) {
+          setStatus("Režģa platumam jābūt pozitīvs skaitlis.", true);
+          return;
+        }
+        if (!Number.isInteger(countX) || countX <= 0) {
+          setStatus("Kolonnu skaitam jābūt vesels skaitlis no 2 līdz 25.", true);
+          return;
+        }
+        if (!Number.isInteger(countY) || countY <= 0) {
+          setStatus("Rindu skaitam jābūt vesels skaitlis no 2 līdz 25.", true);
+          return;
+        }
+        if (countX < 2 || countX > 25) {
+          setStatus("Kolonnu skaitam jābūt vesels skaitlis no 2 līdz 25.", true);
+          return;
+        }
+        if (countY < 2 || countY > 25) {
+          setStatus("Rindu skaitam jābūt vesels skaitlis no 2 līdz 25.", true);
+          return;
+        }
+
+        try {
+          const kml = generateGridKml(lat, lon, size, countX, countY, labelEverySquare, drawKeypad);
+          downloadTextFile(filename, kml);
+          setStatus("KML lejupielādēts: " + filename, false);
+        } catch (error) {
+          setStatus("Neizdevās ģenerēt KML: " + (error && error.message ? error.message : String(error)), true);
+        }
+      });
+    }());
+  </script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js');
+    }
+  </script>
+</body>
+</html>
