@@ -102,7 +102,7 @@
 </head>
 <body>
     <button id="loadBtn" title="Load local 3MF file">Load 3MF...</button>
-    <input id="fileInput" type="file" accept=".3mf,model/3mf" style="display:none;">
+    <input id="fileInput" type="file" accept=".3mf,.stl,model/3mf,model/stl" style="display:none;">
     <button id="resetCameraBtn" title="Reset Camera">⌂</button>
     <button id="fullscreenBtn" title="Fullscreen (F key or double-click)">⛶</button>
     <div id="viewer">
@@ -123,6 +123,7 @@
         import * as THREE from 'three';
 	import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
         import { ThreeMFLoader } from 'three/addons/loaders/3MFLoader.js';
+        import { STLLoader } from 'three/addons/loaders/STLLoader.js';
         let camera, scene, renderer, controls, currentObject;
 
         function init() {
@@ -180,7 +181,7 @@ controls.rotateSpeed = 3.0;
                 }
 
                 if (!is3mfFile(file)) {
-                    document.getElementById('info').textContent = 'Please select a .3mf file';
+                    document.getElementById('info').textContent = 'Please select a .3mf or .stl file';
                     fileInput.value = '';
                     return;
                 }
@@ -218,7 +219,7 @@ controls.rotateSpeed = 3.0;
                 }
 
                 if (!is3mfFile(file)) {
-                    document.getElementById('info').textContent = 'Please drop a .3mf file';
+                    document.getElementById('info').textContent = 'Please drop a .3mf or .stl file';
                     return;
                 }
 
@@ -263,22 +264,23 @@ controls.rotateSpeed = 3.0;
 
         function is3mfFile(file) {
             const name = file.name.toLowerCase();
-            return name.endsWith('.3mf') || file.type === 'model/3mf';
+            return name.endsWith('.3mf') || name.endsWith('.stl') || file.type === 'model/3mf' || file.type === 'model/stl';
         }
 
         function loadModelFromFile(file) {
             // Remove previous model
             if (currentObject) {
                 scene.remove(currentObject);
+                disposeObject(currentObject);
             }
 
             document.getElementById('info').textContent = 'Loading ' + file.name + '...';
+            const isStl = file.name.toLowerCase().endsWith('.stl') || file.type === 'model/stl';
 
             const reader = new FileReader();
             reader.onload = () => {
                 try {
-                    const loader = new ThreeMFLoader();
-                    const object = loader.parse(reader.result);
+                    const object = isStl ? parseStl(reader.result) : parse3mf(reader.result);
                     setModel(object);
                     document.getElementById('info').textContent = file.name;
                 } catch (error) {
@@ -293,6 +295,23 @@ controls.rotateSpeed = 3.0;
             };
 
             reader.readAsArrayBuffer(file);
+        }
+
+        function parse3mf(arrayBuffer) {
+            const loader = new ThreeMFLoader();
+            return loader.parse(arrayBuffer);
+        }
+
+        function parseStl(arrayBuffer) {
+            const loader = new STLLoader();
+            const geometry = loader.parse(arrayBuffer);
+            geometry.computeVertexNormals();
+            const material = new THREE.MeshStandardMaterial({
+                color: 0xb0b0b0,
+                metalness: 0.05,
+                roughness: 0.85,
+            });
+            return new THREE.Mesh(geometry, material);
         }
 
         function setModel(object) {
@@ -316,6 +335,22 @@ controls.rotateSpeed = 3.0;
             controls.update();
 
             render();
+        }
+
+        function disposeObject(object) {
+            object.traverse((child) => {
+                if (child.geometry) {
+                    child.geometry.dispose();
+                }
+
+                if (child.material) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach((material) => material.dispose());
+                    } else {
+                        child.material.dispose();
+                    }
+                }
+            });
         }
 
         function onWindowResize() {
