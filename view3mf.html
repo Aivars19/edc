@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <title>3MF Model Viewer</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            position: relative;
+            overflow: hidden;
+        }
+        #loadBtn {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            height: 40px;
+            padding: 0 14px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 999;
+        }
+        #loadBtn:hover {
+            background: #45a049;
+        }
+        #resetCameraBtn {
+            position: absolute;
+            top: 10px;
+            left: 130px;
+            height: 40px;
+            width: 40px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 999;
+        }
+        #resetCameraBtn:hover {
+            background: #0b7dda;
+        }
+        #fullscreenBtn {
+            position: absolute;
+            top: 10px;
+            left: 180px;
+            width: 40px;
+            height: 40px;
+            background: #FF9800;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 999;
+        }
+        #fullscreenBtn:hover {
+            background: #e68900;
+        }
+        #viewer {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            background: #a0a0a0;
+        }
+        #viewer.drag-over {
+            outline: 3px dashed #4CAF50;
+            outline-offset: -10px;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: #fff;
+            font-size: 14px;
+        }
+        #dropHint {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            padding: 12px 16px;
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.55);
+            color: #fff;
+            font-size: 16px;
+            pointer-events: none;
+            display: none;
+        }
+        #viewer.drag-over #dropHint {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <button id="loadBtn" title="Load local 3MF file">Load 3MF...</button>
+    <input id="fileInput" type="file" accept=".3mf,model/3mf" style="display:none;">
+    <button id="resetCameraBtn" title="Reset Camera">⌂</button>
+    <button id="fullscreenBtn" title="Fullscreen (F key or double-click)">⛶</button>
+    <div id="viewer">
+        <div id="info">Load a local 3MF file</div>
+        <div id="dropHint">Drop 3MF file here</div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+	import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
+        import { ThreeMFLoader } from 'three/addons/loaders/3MFLoader.js';
+        let camera, scene, renderer, controls, currentObject;
+
+        function init() {
+            const container = document.getElementById('viewer');
+
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xa0a0a0);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(
+                35,
+                container.clientWidth / container.clientHeight,
+                1,
+                500
+            );
+            camera.position.set(0, -40, 15);
+
+            // Lights
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x8d8d8d, 3);
+            hemiLight.position.set(0, 100, 0);
+            scene.add(hemiLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 3);
+            dirLight.position.set(-10, 40, 50);
+            scene.add(dirLight);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            container.appendChild(renderer.domElement);
+
+            // Controls
+            controls = new TrackballControls(camera, renderer.domElement); //new OrbitControls(camera, renderer.domElement);
+controls.rotateSpeed = 3.0;
+            controls.addEventListener('change', render);
+            controls.target.set(0, 0, 0);
+            controls.update();
+
+            // Load local file button functionality
+            const loadBtn = document.getElementById('loadBtn');
+            const fileInput = document.getElementById('fileInput');
+            const resetCameraBtn = document.getElementById('resetCameraBtn');
+            const fullscreenBtn = document.getElementById('fullscreenBtn');
+
+            loadBtn.addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            fileInput.addEventListener('change', () => {
+                const [file] = fileInput.files;
+                if (!file) {
+                    return;
+                }
+
+                if (!is3mfFile(file)) {
+                    document.getElementById('info').textContent = 'Please select a .3mf file';
+                    fileInput.value = '';
+                    return;
+                }
+
+                loadModelFromFile(file);
+
+                // Reset value so selecting the same file again triggers change event.
+                fileInput.value = '';
+            });
+
+            // Drag-and-drop support for local 3MF files.
+            container.addEventListener('dragenter', (event) => {
+                event.preventDefault();
+                container.classList.add('drag-over');
+            });
+
+            container.addEventListener('dragover', (event) => {
+                event.preventDefault();
+                container.classList.add('drag-over');
+            });
+
+            container.addEventListener('dragleave', (event) => {
+                if (event.target === container || !container.contains(event.relatedTarget)) {
+                    container.classList.remove('drag-over');
+                }
+            });
+
+            container.addEventListener('drop', (event) => {
+                event.preventDefault();
+                container.classList.remove('drag-over');
+
+                const [file] = event.dataTransfer.files;
+                if (!file) {
+                    return;
+                }
+
+                if (!is3mfFile(file)) {
+                    document.getElementById('info').textContent = 'Please drop a .3mf file';
+                    return;
+                }
+
+                loadModelFromFile(file);
+            });
+            
+            // Reset camera button functionality
+            resetCameraBtn.addEventListener('click', () => {
+                camera.position.set(0, -40, 15);
+                controls.target.set(0, 0, 0);
+                controls.update();
+                render();
+            });
+            
+            // Fullscreen toggle functionality
+            function toggleFullscreen() {
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen();
+                } else {
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen();
+                    }
+                }
+            }
+            
+            // Fullscreen button
+            fullscreenBtn.addEventListener('click', toggleFullscreen);
+            
+            // F key shortcut for fullscreen
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'f' || e.key === 'F') {
+                    toggleFullscreen();
+                }
+            });
+            
+            // Double-click viewer to toggle fullscreen
+            container.addEventListener('dblclick', toggleFullscreen);
+
+            window.addEventListener('resize', onWindowResize);
+            animate();
+        }
+
+        function is3mfFile(file) {
+            const name = file.name.toLowerCase();
+            return name.endsWith('.3mf') || file.type === 'model/3mf';
+        }
+
+        function loadModelFromFile(file) {
+            // Remove previous model
+            if (currentObject) {
+                scene.remove(currentObject);
+            }
+
+            document.getElementById('info').textContent = 'Loading ' + file.name + '...';
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                try {
+                    const loader = new ThreeMFLoader();
+                    const object = loader.parse(reader.result);
+                    setModel(object);
+                    document.getElementById('info').textContent = file.name;
+                } catch (error) {
+                    console.error('Error parsing model:', error);
+                    document.getElementById('info').textContent = 'Error loading ' + file.name;
+                }
+            };
+
+            reader.onerror = () => {
+                console.error('Error reading file:', reader.error);
+                document.getElementById('info').textContent = 'Error reading ' + file.name;
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+
+        function setModel(object) {
+            currentObject = object;
+
+            // Center and scale model
+            const box = new THREE.Box3().setFromObject(object);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const scale = 30 / maxDim;
+            object.scale.setScalar(scale);
+
+            object.position.sub(center.multiplyScalar(scale));
+
+            scene.add(object);
+
+            // Update camera and controls
+            controls.target.copy(object.position);
+            controls.update();
+
+            render();
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('viewer');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            render();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            render();
+        }
+
+        function render() {
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+</html>
